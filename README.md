@@ -1,30 +1,31 @@
 # particle_filter_project
 
 ## Implementation Plan
- - How you will initialize your particle cloud (initialize_particle_cloud)?
-   - Q: what is `map` initialized from? Can we tell what positions are out of bounds from it?
-   - The particle cloud is an array of `Particle`s that represents an estimation of the robots location
+ - How will you initialize your particle cloud (initialize_particle_cloud)?
+   - The particle cloud is an array of `Particle`s that represents an estimation of the robot's location
    - In the beginning this cloud should look like a random distribution of poses within the bounds of the map.
    - In order to generate this cloud, for every particle in our cloud
      - we generate a random coordinate within the bounds of the map,
      - a random yaw between 0 and 2pi radians,
      - and assign it to that particle's pose.
-     - Then we should assign the particle a random weight between 0 and 1
+     - Then we should assign the particle a weight of 1
    - Once we have this randomized cloud, we normalize the weights across it.
    - At this point we've initialized a random particle cloud
- - How you will update the position of the particles will be updated based on the movements of the robot (update_particles_with_motion_model)?
-   - Calculate bel|(x_t) for every particle given the robot's reported movement and the particles previous position x_{t-1}
-   - Update each Poses and weight accordingly (these weights should reflect bel| and shouldn't be normalized)
-   - For every particle in the particle cloud, we update the Pose of the particle to reflect the robot's reported change in linear position and yaw.
-   - If the resulting Pose is outside the bounds of the map (moves off the map, or through a wall), we assign it a weight of 0.
+ - How will you update the position of the particles based on the movements of the robot (update_particles_with_motion_model)?
+   - For every particle in our cloud, calculate a new position x_t given the robot's reported movement and the particle's previous position x_{t-1}.
+   - Assign this position a probability based on the topology of our map. Any points that fall outside our map should be assigned a low, non-zero probability.
+   - Update the pose of each particle using x_t and make the weight reflect the probability of the robot being at x_t
  - How you will compute the importance weights of each particle after receiving the robot's laser scan data?(update_particle_weights_with_measurement_model)?
-   - We will need to implement some form of Bayes Filter that, for each particle in our cloud, can update the probability of the robot being in its specified position, given what it just scanned
-   - In order to do this we'll need to have some concept of odometry and scanning accuracy
+   - After we update the positions in our particle cloud, for each particle we take the probability of the particle's pose.
+   - We then use that probability and the topology of the map to determine the probability that the robot could have taken its most recent laser scan at that position.
+   - Finally we update the weight of the particle to reflect that probability
  - How you will normalize the particles' importance weights (normalize_particles) and resample the particles (resample_particles)?
-   - 
+   - In order to normalize the weights of our particles, we alter their weights to all add up to one while remaining proportional to one another.
+   - We resample by randomly redrawing the particles in our cloud from our current cloud in proportion to each particle's normalized weight.
+   - Assign the new particles in our cloud the same weights and normalize them.
  - How you will update the estimated pose of the robot (update_estimated_robot_pose)?
+   - The estimated pose of the robot should just be the particle in our cloud with the highest weight.
  - How you will incorporate noise into your particle filter localization?
+   - Every time we calculate the new position of a particle, we should add some constant to our reported movement such that `abs(constant) <= noise`, where `noise` is some constant arrived at through testing.
 
 ## Timeline
-
-A brief timeline sketching out when you would like to have accomplished each of the components listed above.
