@@ -132,33 +132,32 @@ class ParticleFilter:
         map_resolution = map_info.resolution
 
         # How many cells the map is across
-        map_width_cells = map_info.width
-        print("Width cells: ", map_width_cells)
-
-        map_width_m = map_width_cells * map_resolution
+        map_width = map_info.width
 
         # How many cells the map is up and down
-        map_height_cells = map_info.height
-        print("Height cells: ", map_height_cells)
-        map_height_m = map_height_cells * map_resolution
+        map_height = map_info.height
 
         # The pose of the maps origin
         # We'll use this to calculate a positional offsets for our random particles
         map_origin = map_info.origin
 
-        # A list of scalars to generate random x coords for all our particles
-        x_rands = np.random.randint(map_width_cells, size=self.num_particles)
-        # Same for y
-        y_rands = np.random.randint(map_width_cells, size=self.num_particles)
-        # Same for our yaws
+        # A list of integers between 0 and map_width to generate random x coords for all our particles
+        w_rands = np.random.randint(map_width, size=self.num_particles)
+        # A list of integers between 0 and map_height to generate random y coords for all our particles
+        h_rands = np.random.randint(map_width, size=self.num_particles)
+        # a list of random scalars to generate random yaws for our particles
         yaw_rands = np.random.rand(self.num_particles)
+
         # For every particle we want
-        for x_r, y_r, yaw_r in zip(x_rands, y_rands, yaw_rands):
+        # a random x_cell position
+        # a random y_cell position
+        # and a random yaw scalar
+        for w_r, h_r, yaw_r in zip(w_rands, h_rands, yaw_rands):
 
             # Draw a random x,y position using our height and width
             # The map is square so this is a safe sample to pull positions from
-            pose_x = x_r * map_resolution + map_origin.position.x
-            pose_y = y_r * map_resolution + map_origin.position.y
+            pose_x = w_r * map_resolution + map_origin.position.x
+            pose_y = h_r * map_resolution + map_origin.position.y
 
             # Draw a random yaw from 0 to 2pi
             pose_yaw = yaw_r * 2 * pi
@@ -167,7 +166,7 @@ class ParticleFilter:
             # Initialize a new pose to hold our data
             pose = Pose()
 
-            # Populate that pose
+            # Populate that pose with our new random position
             pose.position.x = pose_x
             pose.position.y = pose_y
             pose.position.z = 0
@@ -176,13 +175,11 @@ class ParticleFilter:
             pose.orientation.z = pose_quaternion[2]
             pose.orientation.w = pose_quaternion[3]
 
-            pose_cell_probability = map_data[x_r + y_r * map_width_cells]
-            if pose_cell_probability >= 0:
+            # Assign that position a probability weight based on whether the robot could feasibly be there
+            # For each cell, a value of 1 is good, while 0 or -1 indicates a wall or empty space
+            weight = 0
+            if map_data[w_r + h_r * map_width] > 0:
                 weight = 1
-                print("Assigning weight 1 to particle")
-            else:
-                # print("Assigning weight 0 to particle")
-                weight = 0
 
             # add this to our cloud
             self.particle_cloud.append(Particle(pose, weight))
