@@ -122,8 +122,37 @@ class ParticleFilter:
     
 
     def initialize_particle_cloud(self):
-        
-        # TODO
+        # Pulls a MapMetaData object from the map: http://docs.ros.org/en/lunar/api/nav_msgs/html/msg/OccupancyGrid.html
+        map_info = self.map.info
+        # The data of our map specifying occupancy probabilities
+        map_data = self.map.data
+
+        # A float describing m / cell fo the map
+        map_resolution = map_info.resolution
+
+        # How many cells the map is across
+        map_width = map_info.width
+
+        # How many cells the map is up and down
+        map_height = map_info.height
+
+        # The pose of the maps origin
+        # We'll use this to calculate a positional offsets for our random particles
+        map_origin = map_info.origin
+
+        # For every particle we want
+        for i in range(self.num_particles):
+            # Draw a random x,y position using our height and width
+            # The map is square so this is a safe sample to pull positions from
+            pose_x = 0 + map_origin.pose.point.x
+            pose_y = 0 + map_origin.pose.point.y
+
+            # Draw a random yaw from 0 to 2pi
+            pose_yaw = 0
+            pose_quaternion = quaternion_from_euler(0, 0, pose_yaw) # Double check that this is correct with TA
+
+            # Draw
+            pass
 
 
         self.normalize_particles()

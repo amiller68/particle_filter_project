@@ -1,4 +1,5 @@
 # particle_filter_project
+Alex Miller and Josh Garza
 
 ## Implementation Plan
  - How will you initialize your particle cloud (`initialize_particle_cloud`)?
