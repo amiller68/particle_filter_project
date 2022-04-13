@@ -15,6 +15,7 @@ from tf.transformations import quaternion_from_euler, euler_from_quaternion
 import numpy as np
 from numpy.random import random_sample
 import math
+from math import pi
 
 from random import randint, random
 
@@ -131,41 +132,71 @@ class ParticleFilter:
         map_resolution = map_info.resolution
 
         # How many cells the map is across
-        map_width = map_info.width
+        map_width_cells = map_info.width
+        print("Width cells: ", map_width_cells)
+
+        map_width_m = map_width_cells * map_resolution
 
         # How many cells the map is up and down
-        map_height = map_info.height
+        map_height_cells = map_info.height
+        print("Height cells: ", map_height_cells)
+        map_height_m = map_height_cells * map_resolution
 
         # The pose of the maps origin
         # We'll use this to calculate a positional offsets for our random particles
         map_origin = map_info.origin
 
+        # A list of scalars to generate random x coords for all our particles
+        x_rands = np.random.randint(map_width_cells, size=self.num_particles)
+        # Same for y
+        y_rands = np.random.randint(map_width_cells, size=self.num_particles)
+        # Same for our yaws
+        yaw_rands = np.random.rand(self.num_particles)
         # For every particle we want
-        for i in range(self.num_particles):
+        for x_r, y_r, yaw_r in zip(x_rands, y_rands, yaw_rands):
+
             # Draw a random x,y position using our height and width
             # The map is square so this is a safe sample to pull positions from
-            pose_x = 0 + map_origin.pose.point.x
-            pose_y = 0 + map_origin.pose.point.y
+            pose_x = x_r * map_resolution + map_origin.position.x
+            pose_y = y_r * map_resolution + map_origin.position.y
 
             # Draw a random yaw from 0 to 2pi
-            pose_yaw = 0
+            pose_yaw = yaw_r * 2 * pi
             pose_quaternion = quaternion_from_euler(0, 0, pose_yaw) # Double check that this is correct with TA
 
-            # Draw
-            pass
+            # Initialize a new pose to hold our data
+            pose = Pose()
 
+            # Populate that pose
+            pose.position.x = pose_x
+            pose.position.y = pose_y
+            pose.position.z = 0
+            pose.orientation.x = pose_quaternion[0]
+            pose.orientation.y = pose_quaternion[1]
+            pose.orientation.z = pose_quaternion[2]
+            pose.orientation.w = pose_quaternion[3]
+
+            pose_cell_probability = map_data[x_r + y_r * map_width_cells]
+            if pose_cell_probability >= 0:
+                weight = 1
+                print("Assigning weight 1 to particle")
+            else:
+                # print("Assigning weight 0 to particle")
+                weight = 0
+
+            # add this to our cloud
+            self.particle_cloud.append(Particle(pose, weight))
 
         self.normalize_particles()
-
         self.publish_particle_cloud()
 
 
     def normalize_particles(self):
-        # make all the particle weights sum to 1.0
-        
-        # TODO
-
-
+        weight_sum = 0
+        for particle in self.particle_cloud:
+            weight_sum = weight_sum + particle.w
+        for particle in self.particle_cloud:
+            particle.w = particle.w / weight_sum
 
     def publish_particle_cloud(self):
 
@@ -191,7 +222,7 @@ class ParticleFilter:
 
 
     def resample_particles(self):
-
+        pass
         # TODO
 
 
@@ -270,20 +301,18 @@ class ParticleFilter:
 
     def update_estimated_robot_pose(self):
         # based on the particles within the particle cloud, update the robot pose estimate
-        
+        pass
         # TODO
 
 
     
     def update_particle_weights_with_measurement_model(self, data):
-
+        pass
         # TODO
 
 
-        
-
     def update_particles_with_motion_model(self):
-
+        pass
         # based on the how the robot has moved (calculated from its odometry), we'll  move
         # all of the particles correspondingly
 

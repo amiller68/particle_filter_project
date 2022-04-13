@@ -34,17 +34,17 @@ Always:
 - Fill out the writeup and write comments as we go
 
 This week:
-- Get the map of the maze
-- Implement particle cloud initialization
-  - Test if our initial clouds look random enough
-- Implement particle normalization and resampling
-  - This will be needed by any strategy we choose to implement
-- Implement guessing current position based on state of our particle cloud
-  - Straightforward and needed to test the reliability of the system
-- Implement probabilistic position updating
-  - Design and implement a prototype model that calculates positional probability
-  - Test if we can rule out some positions just based on the movement of our robot
-  - Try doing this without incorporating noise, and then try incorporating noise
+[x] Get the map of the maze
+[x] Implement particle cloud initialization
+  - Test if our initial clouds look random enough 
+  - Implement particle normalization and resampling
+    - This will be needed by any strategy we choose to implement
+  - Implement guessing current position based on state of our particle cloud
+    - Straightforward and needed to test the reliability of the system
+  - Implement probabilistic position updating
+    - Design and implement a prototype model that calculates positional probability
+    - Test if we can rule out some positions just based on the movement of our robot
+    - Try doing this without incorporating noise, and then try incorporating noise
   
 Next Week
 - Implement particle cloud weight updating using laser scan data
