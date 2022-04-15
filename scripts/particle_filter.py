@@ -12,6 +12,8 @@ from tf import TransformListener
 from tf import TransformBroadcaster
 from tf.transformations import quaternion_from_euler, euler_from_quaternion
 
+from likelihood_field import LikelihoodField
+
 import numpy as np
 from numpy.random import random_sample
 import math
@@ -74,6 +76,7 @@ class ParticleFilter:
 
         # inialize our map
         self.map = OccupancyGrid()
+        self.likelihood_field = LikelihoodField()
 
         # the number of particles used in the particle filter
         self.num_particles = 10000
@@ -311,10 +314,47 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
+        # For every particle
+        # BELOW IS CODE I USED FOR CLASS ASSIGNEMENT. I THINK IT MOSTLY WORKS
+
+        # for p in self.particle_cloud:
+        #     x = p.pose.position.x
+        #     y = p.pose.position.y
+        #     theta = (euler_from_quaternion(
+        #         [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
+        #     print("Updating particle at [", x, y, theta, "]")
+        #     q = 1
+        #     info = False
+        #     for cd, cr in zip(cardinal_directions_idxs, cardinal_radians):
+        #         z_k = scan.ranges[cd]
+        #         print("Looking in direction: ", cd, "| range: ", z_k)
+        #         if not math.isinf(z_k):
+        #             print("hmm")
+        #             info = True
+        #             # Calculate X and Y given z^k_t
+        #             x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + cr)
+        #             y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + cr)
+        #             dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+        #             prob = compute_prob_zero_centered_gaussian(dist, 0.1)
+        #             print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
+        #                   prob)
+        #             q = q * prob
+        #         else:
+        #             print("Too far to tell")
+        #     if info:
+        #         p.w = q
+        #     else:
+        #         print("no information to update q!")
         pass
         # TODO
 
     def update_particles_with_motion_model(self):
+        # Basically:
+        # For each particle
+        #  - Calculate a new position using a movement command drawn from a gaussian distribution based
+        #    on the robots reported movement.
+        #  - If that pos is outside the map, give that particle a low weight programmaticaly. We can check this with the likelihood thing
+        
         pass
         # based on the how the robot has moved (calculated from its odometry), we'll  move
         # all of the particles correspondingly
