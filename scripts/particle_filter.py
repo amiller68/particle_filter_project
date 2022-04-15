@@ -314,8 +314,11 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        # For every particle
         # BELOW IS CODE I USED FOR CLASS ASSIGNEMENT. I THINK IT MOSTLY WORKS
+        # scan = data
+        #
+        # cardinal_directions_idxs = [0, 90, 180, 270]
+        # cardinal_radians = [0, pi / 2, pi, 3 * pi / 2]
 
         # for p in self.particle_cloud:
         #     x = p.pose.position.x
@@ -354,7 +357,7 @@ class ParticleFilter:
         #  - Calculate a new position using a movement command drawn from a gaussian distribution based
         #    on the robots reported movement.
         #  - If that pos is outside the map, give that particle a low weight programmaticaly. We can check this with the likelihood thing
-        
+
         pass
         # based on the how the robot has moved (calculated from its odometry), we'll  move
         # all of the particles correspondingly
