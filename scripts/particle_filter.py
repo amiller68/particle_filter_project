@@ -44,6 +44,7 @@ def draw_random_sample():
     return
 
 
+
 class Particle:
 
     def __init__(self, pose, w):
@@ -311,57 +312,70 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        # BELOW IS CODE I USED FOR CLASS ASSIGNEMENT. I THINK IT MOSTLY WORKS
-        # scan = data
-        #
-        # cardinal_directions_idxs = [0, 90, 180, 270]
-        # cardinal_radians = [0, pi / 2, pi, 3 * pi / 2]
-
-        # for p in self.particle_cloud:
-        #     x = p.pose.position.x
-        #     y = p.pose.position.y
-        #     theta = (euler_from_quaternion(
-        #         [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
-        #     print("Updating particle at [", x, y, theta, "]")
-        #     q = 1
-        #     info = False
-        #     for cd, cr in zip(cardinal_directions_idxs, cardinal_radians):
-        #         z_k = scan.ranges[cd]
-        #         print("Looking in direction: ", cd, "| range: ", z_k)
-        #         if not math.isinf(z_k):
-        #             print("hmm")
-        #             info = True
-        #             # Calculate X and Y given z^k_t
-        #             x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + cr)
-        #             y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + cr)
-        #             dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
-        #             prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-        #             print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
-        #                   prob)
-        #             q = q * prob
-        #         else:
-        #             print("Too far to tell")
-        #     if info:
-        #         p.w = q
-        #     else:
-        #         print("no information to update q!")
-        pass
-        # TODO
+        scan = data
+        for p in self.particle_cloud:
+            x = p.pose.position.x
+            y = p.pose.position.y
+            theta = (euler_from_quaternion(
+                [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
+            # print("Updating particle at [", x, y, theta, "]")
+            q = 1
+            info = False
+            cd = [0, 90, 180, 270]
+            for a in cd:
+                z_k = scan.ranges[a]
+                # print("Looking in direction: ", a, "| range: ", z_k)
+                if np.isfinite(z_k):
+                    # Calculate X and Y given z^k_t
+                    x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + radians(a))
+                    y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + radians(a))
+                    dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+                    if dist:
+                        info = True
+                        prob = compute_prob_zero_centered_gaussian(dist, 0.1)
+                        # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
+                        #       prob)
+                        q = q * prob
+                else:
+                    pass
+                    # print("Too far to tell")
+            if info:
+                p.w = q
+        # pass
 
     def update_particles_with_motion_model(self):
-        # Draw a normal distribution of positional updates based on the robots reported odometry
-        # See: https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
-        # Basically:
-        # For each particle
-        #  - Calculate a new position using a movement command drawn from a gaussian distribution based
-        #    on the robots reported movement.
-        #  - If that pos is outside the map, give that particle a low weight programmaticaly. We can check this with the likelihood thing
+            x_update = self.odom_pose.pose.position.x - self.odom_pose_last_motion_update.pose.position.x
+            y_update = self.odom_pose.pose.position.y - self.odom_pose_last_motion_update.pose.position.y
+            yaw_update = get_yaw_from_pose(self.odom_pose.pose) - get_yaw_from_pose(self.odom_pose_last_motion_update.pose)
 
-        pass
-        # based on the how the robot has moved (calculated from its odometry), we'll  move
-        # all of the particles correspondingly
+            # TODO: Experiment for constants here
+            x_rands = np.random.normal(0, .001, self.num_particles)
+            y_rands = np.random.normal(0, .001, self.num_particles)
+            yaw_rands = np.random.normal(0, .001, self.num_particles)
 
-        # TODO
+            for p, x_r, y_r, yaw_r in zip(self.particle_cloud, x_rands, y_rands, yaw_rands):
+                # Draw a random x,y position using our height and width
+                pose_x = p.pose.position.x + x_update + x_r
+                pose_y = p.pose.position.y + y_update + y_r
+
+                # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
+                #     p.w = 0.0000001
+
+                # Draw a random yaw from 0 to 2pi
+                pose_yaw = get_yaw_from_pose(p.pose) + yaw_update + yaw_r
+
+                # Calculate the quaternion
+                pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
+
+                # Populate that pose with our new random position
+                p.pose.position.x = pose_x
+                p.pose.position.y = pose_y
+                p.pose.position.z = 0
+                # and orientation
+                p.pose.orientation.x = pose_quaternion[0]
+                p.pose.orientation.y = pose_quaternion[1]
+                p.pose.orientation.z = pose_quaternion[2]
+                p.pose.orientation.w = pose_quaternion[3]
 
 if __name__=="__main__":
 
