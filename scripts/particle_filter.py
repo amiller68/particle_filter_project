@@ -293,23 +293,20 @@ class ParticleFilter:
                 self.odom_pose_last_motion_update = self.odom_pose
 
     def update_estimated_robot_pose(self):
-        # Pull the top 5% of guesses of particle by weight
-        best_guesses = sorted(self.particle_cloud, key=lambda p: p.w, reverse=True)[:self.num_particles // 20]
-
         # Initialize a new estimated pose
         estimate = Pose()
-        # For now, just create an unweighted average of these particles
-        for p in best_guesses:
+        # Calculate an unweighted average of all particles
+        for p in self.particle_cloud:
             # Add to the pose's position
-            estimate.position.x = estimate.position.x + p.pose.position.x / len(best_guesses)
-            estimate.position.y = estimate.position.y + p.pose.position.y / len(best_guesses)
+            estimate.position.x = estimate.position.x + p.pose.position.x / self.num_particles
+            estimate.position.y = estimate.position.y + p.pose.position.y / self.num_particles
             estimate.position.z = 0
 
             # and orientation
-            estimate.orientation.x = estimate.orientation.x + p.pose.orientation.x / len(best_guesses)
-            estimate.orientation.y = estimate.orientation.y + p.pose.orientation.y / len(best_guesses)
-            estimate.orientation.z = estimate.orientation.z + p.pose.orientation.z / len(best_guesses)
-            estimate.orientation.w = estimate.orientation.w + p.pose.orientation.w / len(best_guesses)
+            estimate.orientation.x = estimate.orientation.x + p.pose.orientation.x / self.num_particles
+            estimate.orientation.y = estimate.orientation.y + p.pose.orientation.y / self.num_particles
+            estimate.orientation.z = estimate.orientation.z + p.pose.orientation.z / self.num_particles
+            estimate.orientation.w = estimate.orientation.w + p.pose.orientation.w / self.num_particles
         # Set the estimated pose to our new estimate
         self.robot_estimate = estimate
 
@@ -352,6 +349,8 @@ class ParticleFilter:
         # TODO
 
     def update_particles_with_motion_model(self):
+        # Draw a normal distribution of positional updates based on the robots reported odometry
+        # See: https://numpy.org/doc/stable/reference/random/generated/numpy.random.normal.html
         # Basically:
         # For each particle
         #  - Calculate a new position using a movement command drawn from a gaussian distribution based
