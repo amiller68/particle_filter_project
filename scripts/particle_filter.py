@@ -198,7 +198,7 @@ class ParticleFilter:
     def publish_particle_cloud(self):
         particle_cloud_pose_array = PoseArray()
         particle_cloud_pose_array.header = Header(stamp=rospy.Time.now(), frame_id=self.map_topic)
-        # particle_cloud_pose_array.poses
+        particle_cloud_pose_array.poses
 
         for part in self.particle_cloud:
             particle_cloud_pose_array.poses.append(part.pose)
@@ -312,70 +312,95 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        scan = data
-        for p in self.particle_cloud:
-            x = p.pose.position.x
-            y = p.pose.position.y
-            theta = (euler_from_quaternion(
-                [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
-            # print("Updating particle at [", x, y, theta, "]")
-            q = 1
-            info = False
-            cd = [0, 90, 180, 270]
-            for a in cd:
-                z_k = scan.ranges[a]
-                # print("Looking in direction: ", a, "| range: ", z_k)
-                if np.isfinite(z_k):
-                    # Calculate X and Y given z^k_t
-                    x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + radians(a))
-                    y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + radians(a))
-                    dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
-                    if dist:
-                        info = True
-                        prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-                        # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
-                        #       prob)
-                        q = q * prob
-                else:
-                    pass
-                    # print("Too far to tell")
-            if info:
-                p.w = q
-        # pass
+        # scan = data
+        # for p in self.particle_cloud:
+        #     x = p.pose.position.x
+        #     y = p.pose.position.y
+        #     theta = (euler_from_quaternion(
+        #         [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
+        #     # print("Updating particle at [", x, y, theta, "]")
+        #     q = 1
+        #     info = False
+        #     cd = [0, 90, 180, 270]
+        #     for a in cd:
+        #         z_k = scan.ranges[a]
+        #         # print("Looking in direction: ", a, "| range: ", z_k)
+        #         if np.isfinite(z_k):
+        #             # Calculate X and Y given z^k_t
+        #             x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + radians(a))
+        #             y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + radians(a))
+        #             dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+        #             if dist:
+        #                 info = True
+        #                 prob = compute_prob_zero_centered_gaussian(dist, 0.1)
+        #                 # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
+        #                 #       prob)
+        #                 q = q * prob
+        #         else:
+        #             pass
+        #             # print("Too far to tell")
+        #     if info:
+        #         p.w = q
+        pass
+
+    def model_odometry_translation(self):
+        curr_x = self.odom_pose.pose.position.x
+        old_x = self.odom_pose_last_motion_update.pose.position.x
+        curr_y = self.odom_pose.pose.position.y
+        old_y = self.odom_pose_last_motion_update.pose.position.y
+        curr_yaw = get_yaw_from_pose(self.odom_pose.pose)
+        old_yaw = get_yaw_from_pose(self.odom_pose_last_motion_update.pose)
+
+        # Using the model Sarah referenced in the Slack Channel
+        # Online source here: https://docs.ufpr.br/~danielsantos/ProbabilisticRobotics.pdf
+        d_rot1 = math.atan2(curr_y - old_y, curr_x - old_x) - old_yaw
+        d_trans = math.sqrt(pow(old_x - curr_x, 2) + pow(old_y - curr_y, 2))
+        d_rot2 = curr_yaw - old_yaw - d_rot1
+
+        return d_rot1, d_trans, d_rot2
 
     def update_particles_with_motion_model(self):
-            x_update = self.odom_pose.pose.position.x - self.odom_pose_last_motion_update.pose.position.x
-            y_update = self.odom_pose.pose.position.y - self.odom_pose_last_motion_update.pose.position.y
-            yaw_update = get_yaw_from_pose(self.odom_pose.pose) - get_yaw_from_pose(self.odom_pose_last_motion_update.pose)
+        d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
 
-            # TODO: Experiment for constants here
-            x_rands = np.random.normal(0, .001, self.num_particles)
-            y_rands = np.random.normal(0, .001, self.num_particles)
-            yaw_rands = np.random.normal(0, .001, self.num_particles)
+        # TODO: Experiment for constants here
+        rot1_rands = np.random.normal(0, .00, self.num_particles)
+        trans_rands = np.random.normal(0, .00, self.num_particles)
+        rot2_rands = np.random.normal(0, .00, self.num_particles)
 
-            for p, x_r, y_r, yaw_r in zip(self.particle_cloud, x_rands, y_rands, yaw_rands):
-                # Draw a random x,y position using our height and width
-                pose_x = p.pose.position.x + x_update + x_r
-                pose_y = p.pose.position.y + y_update + y_r
+        for p, r1_r, t_r, r2_r in zip(self.particle_cloud, rot1_rands, trans_rands, rot2_rands):
+            # Draw a random x,y position using our height and width
+            d_hat_rot1 = d_rot1 + r1_r
+            d_hat_trans = d_trans + t_r
+            d_hat_rot2 = d_rot2 + r2_r
 
-                # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
-                #     p.w = 0.0000001
+            pose_yaw = get_yaw_from_pose(p.pose)
 
-                # Draw a random yaw from 0 to 2pi
-                pose_yaw = get_yaw_from_pose(p.pose) + yaw_update + yaw_r
+            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1)
+            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1)
 
-                # Calculate the quaternion
-                pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
+            pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
 
-                # Populate that pose with our new random position
-                p.pose.position.x = pose_x
-                p.pose.position.y = pose_y
-                p.pose.position.z = 0
-                # and orientation
-                p.pose.orientation.x = pose_quaternion[0]
-                p.pose.orientation.y = pose_quaternion[1]
-                p.pose.orientation.z = pose_quaternion[2]
-                p.pose.orientation.w = pose_quaternion[3]
+            if pose_yaw > 2 * math.pi:
+                pose_yaw = pose_yaw % 2 * math.pi
+            elif pose_yaw < 0:
+                pose_yaw = pose_yaw + 2 * math.pi
+
+
+            # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
+            #     p.w = p.w / 100
+
+            # Calculate the quaternion for our new pose
+            pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
+
+            # Populate that pose with our new random position
+            p.pose.position.x = pose_x
+            p.pose.position.y = pose_y
+            p.pose.position.z = 0
+            # and orientation
+            p.pose.orientation.x = pose_quaternion[0]
+            p.pose.orientation.y = pose_quaternion[1]
+            p.pose.orientation.z = pose_quaternion[2]
+            p.pose.orientation.w = pose_quaternion[3]
 
 if __name__=="__main__":
 
