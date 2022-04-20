@@ -80,7 +80,7 @@ class ParticleFilter:
         self.likelihood_field = LikelihoodField()
 
         # the number of particles used in the particle filter
-        self.num_particles = 10000
+        self.num_particles = 1000
 
         self.weight_sum = 0
 
