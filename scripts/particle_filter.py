@@ -21,7 +21,7 @@ from math import pi
 
 from random import randint, random
 
-
+import time
 
 def get_yaw_from_pose(p):
     """ A helper function that takes in a Pose object (geometry_msgs) and returns yaw"""
@@ -126,6 +126,9 @@ class ParticleFilter:
         self.map = data
 
     def initialize_particle_cloud(self):
+        # Ensure that self.map has been properly initialized before initializing particle cloud
+        while self.map.info.width == 0:
+            time.sleep(0.5)
         # Pulls a MapMetaData object from the map: http://docs.ros.org/en/lunar/api/nav_msgs/html/msg/OccupancyGrid.html
         map_info = self.map.info
         # The data of our map specifying occupancy probabilities
