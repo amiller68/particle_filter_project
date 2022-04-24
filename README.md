@@ -56,3 +56,47 @@ Next Week
 - Edit codebase to look nice, have more comments
 - Edit writeup
 - If time's left do EC
+
+
+## Objectives
+The goal of this project is to implement an algorithm to estimate the state (position and orientation) of a robot in a known environment. Given a map of its environment and real-time sensor and odometry data, the goal is to simulate what the robot would see if it were at various different points and compare that to what it is actually seeing. After several iterations, we should be able to come up with an increasingly accurate estimation of its location in real-time.
+
+## High Level Description
+We begin by initializing a cloud of randomly (uniformly) distributed particles with random orientations. Each time new sensor data arrives from the robot, we follow a series of steps to update the particles’ positions/orientations, their weights, and the estimated position of the robot. To update the particles’ positions and orientations, we use the rotation, translation, rotation model with some added noise. To update the particles’ weights, we use a likelihood field to determine the probability that the nearest obstacles for a given particle (in the cardinal directions) matches up with the observed nearest objects of the robot. To update the estimated position of the robot, we simply take the unweighted mean of each particle’s position and orientation. We then normalize the particles’ weights and resample the particles to create a new particle cloud based on the updated weights. This new particle cloud serves as the basis for generating the estimated pose, both of which are then published to their respective ROS topics. 
+
+## Steps
+###	Initialization of particle cloud
+Location: ``initialize_particle_cloud()``
+Description: To initialize the particle cloud, we start by defining some local variables with information about the map of the environment, specifically the map data, resolution, width, height, and origin location. We then draw three sets of random samples of length ``num_particles``, one ranging from 0 - ``map_width`` (x values), one from from 0 - ``map_height`` (y values), and one from 0 - 1 (later to be multiplied by 2pi for our yaw values). We use the built-in function ``zip()`` to group the random x, y, and yaw values together to add to the particle clouds, and also initialize each weight to 1.0.
+
+### Movement model
+Location: ``update_particles_with_motion_model()``
+Description: 
+``model_odometry_translation()``: This function computes ``d_rot1``, ``d_trans``, and ``d_rot2`` for use in the rotation, translation, rotation particle update movement model. It subtracts the new and old x, y, and yaw values from the current and previous odometry data, then uses geometry to calculate the appropriate values.
+``update_particles_with_motion_model()``: We begin by drawing three sets of ``num_particles`` random numbers on a gaussian distribution, which we then combine with ``d_rot1``, ``d_trans``, and ``d_rot2`` from ``model_odometry_translation()`` to add noise. We then combine the corresponding current pose values with the new movement values to update the pose of each particle to the new value. 
+
+### Measurement model
+Location: ``update_particles_with_measurement_model()``
+Description: For each particle in ``self.particle_cloud``, we “look” in each of the four cardinal directions (in degrees: 0, 90, 180, 270) to find the nearest obstacle using a likelihood field. We then calculate the probability of the reported nearest obstacle being the observed/nearest obstacle in each direction to determine the likelihood that that particle is the true location of the robot. The likelihood is set as the weight of each particle. 
+
+### Resampling
+Location: ``resample_particles()``
+Description: We use ``np.random.choice()`` to resample the particles with replacement based on their normalized weights. First, we use list comprehension to assemble a list of each particles weight. We then feed that list and ``self.particle_cloud`` into ``np.random.choice()`` to compute a new particle cloud of the same length ``num_particles``. 
+
+### Incorporation of noise
+Location: 
+Description: 
+
+### Updating estimated robot pose
+Location: ``update_estimated_robot_pose()``
+Description: To update the estimated pose of the robot we take the unweighted mean of the position and orientation of all particles in ``self.particle_cloud``. We initialize an empty ``Pose`` and iterate through all of the particles, adding the quotient of their position/orientation and ``self.num_particles`` to the new ``Pose``’s position/orientation. We then set ``self.robot_estimate`` equal to the new ``Pose``.
+
+### Optimization of parameters
+Location: 
+Description: 
+
+## Challenges
+
+## Future Work
+
+## Takeaways
