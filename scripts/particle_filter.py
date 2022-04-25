@@ -25,8 +25,6 @@ import time, sys
 
 from math import radians
 
-from measurement_update_likelihood_field import compute_prob_zero_centered_gaussian
-
 def get_yaw_from_pose(p):
     """ A helper function that takes in a Pose object (geometry_msgs) and returns yaw"""
 
@@ -38,6 +36,14 @@ def get_yaw_from_pose(p):
             [2])
 
     return yaw
+
+
+def compute_prob_zero_centered_gaussian(dist, sd):
+    """ Takes in distance from zero (dist) and standard deviation (sd) for gaussian
+        and returns probability (likelihood) of observation """
+    c = 1.0 / (sd * math.sqrt(2 * math.pi))
+    prob = c * math.exp((-math.pow(dist,2))/(2 * math.pow(sd, 2)))
+    return prob
 
 
 def draw_random_sample():
@@ -84,8 +90,10 @@ class ParticleFilter:
         # initialize a likelihood field of the map
         self.likelihood_field = LikelihoodField()
 
+        self.z_hit = 0.8
+
         # the number of particles used in the particle filter
-        # self.num_particles = 10000
+        # self.num_particles = 10
         self.num_particles = 5000
 
         # Keep track of our total normalized weights for error checking during resample
@@ -206,16 +214,22 @@ class ParticleFilter:
     def normalize_particles(self):
         # Extract the un-normalized weights
         weights = np.array([p.w for p in self.particle_cloud])
-        normalized_weights = weights / np.sum(weights)
-        self.weight_sum = np.sum(normalized_weights)
+        all_equal = True
+        for w in weights:
+            if w != weights[0]:
+                all_equal = False
+        if all_equal:
+            weights = np.array([1.0] * self.num_particles)
+        normalized_weights = weights / weights.sum()
+        self.weight_sum = weights.sum()
         # Update every particle using the new normalized weight
-        for p, nw in zip(self.particle_cloud,normalized_weights):
+        for p, nw in zip(self.particle_cloud, normalized_weights):
             p.w = nw
 
     def publish_particle_cloud(self):
         particle_cloud_pose_array = PoseArray()
         particle_cloud_pose_array.header = Header(stamp=rospy.Time.now(), frame_id=self.map_topic)
-        particle_cloud_pose_array.poses
+        # particle_cloud_pose_array.poses
 
         for part in self.particle_cloud:
             particle_cloud_pose_array.poses.append(part.pose)
@@ -235,7 +249,7 @@ class ParticleFilter:
             # Resample the particles based on their weights
             self.particle_cloud = np.random.choice(
                 self.particle_cloud,
-                size = self.num_particles,
+                size=self.num_particles,
                 p=particle_probabilities
             )
             # print("Resampled size: ", len(self.particle_cloud))
@@ -243,7 +257,7 @@ class ParticleFilter:
         except ValueError as e:
             print(e)
             print("Normalizer: ", self.weight_sum)
-            sys.exit(1)
+            sys.exit()
 
     def robot_scan_received(self, data):
         # wait until initialization is complete
@@ -346,6 +360,7 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
+        any = False
         for p in self.particle_cloud:
             theta = get_yaw_from_pose(p.pose)
             q = 1
@@ -357,19 +372,24 @@ class ParticleFilter:
             for a in measurement_directions:
                 z_k = data.ranges[a]
                 # print("Looking in direction: ", a, "| range: ", z_k)
-                if np.isfinite(z_k):
+                if np.isfinite(z_k) or z_k == 0:
                     # Calculate X and Y given z^k_t
-                    x_z = p.pose.position.x + (z_k * np.cos(theta + np.radians(a))) * self.map.info.resolution
-                    y_z = p.pose.position.y + (z_k * np.sin(theta + np.radians(a))) * self.map.info.resolution
+                    x_z = p.pose.position.x + (z_k * np.cos(theta + np.radians(a))) # * self.map.info.resolution
+                    y_z = p.pose.position.y + (z_k * np.sin(theta + np.radians(a))) # * self.map.info.resolution
                     dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
-                    if dist:
+                    if not math.isnan(dist):
+                        any = True
                         usable_dist_info = True
                         prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-                        q *= prob
+                        if not math.isnan(prob):
+                            q = q * self.z_hit * prob
             if usable_dist_info:
                 p.w = q
-            # else:
-            #     p.w = p.w / 2
+        if not any:
+            print("[ERROR] No likelihoods to use as updaters!!")
+        else:
+            print("At least one good update")
+        # print(updates)
 
     def model_odometry_translation(self):
         curr_x = self.odom_pose.pose.position.x
