@@ -21,7 +21,11 @@ from math import pi
 
 from random import randint, random
 
-import time
+import time, sys
+
+from math import radians
+
+from measurement_update_likelihood_field import compute_prob_zero_centered_gaussian
 
 def get_yaw_from_pose(p):
     """ A helper function that takes in a Pose object (geometry_msgs) and returns yaw"""
@@ -192,8 +196,8 @@ class ParticleFilter:
     def normalize_particles(self):
         # Extract the un-normalized weights
         weights = np.array([p.w for p in self.particle_cloud])
-        normalized_weights = weights / weights.sum()
-        self.weight_sum = normalized_weights.sum()
+        normalized_weights = weights / np.sum(weights)
+        self.weight_sum = np.sum(normalized_weights)
         # Update every particle using the new normalized weight
         for p, nw in zip(self.particle_cloud,normalized_weights):
             p.w = nw
@@ -300,51 +304,70 @@ class ParticleFilter:
         # Initialize a new estimated pose
         estimate = Pose()
         # Calculate an unweighted average of all particles
+        # First, set all values to 0
+        estimate.position.x = 0
+        estimate.position.y = 0
+        estimate.position.z = 0
+        estimate.orientation.x = 0
+        estimate.orientation.y = 0
+        estimate.orientation.z = 0
+        estimate.orientation.w = 0
+        
+        # Iterate through all particles to sum their positions and orientations
         for p in self.particle_cloud:
-            # Add to the pose's position
-            estimate.position.x = estimate.position.x + p.pose.position.x / self.num_particles
-            estimate.position.y = estimate.position.y + p.pose.position.y / self.num_particles
-            estimate.position.z = 0
+            estimate.position.x += p.pose.position.x
+            estimate.position.y += p.pose.position.y
+            estimate.orientation.x += p.pose.orientation.x
+            estimate.orientation.y += p.pose.orientation.y
+            estimate.orientation.z += p.pose.orientation.z
+            estimate.orientation.w += p.pose.orientation.w
 
-            # and orientation
-            estimate.orientation.x = estimate.orientation.x + p.pose.orientation.x / self.num_particles
-            estimate.orientation.y = estimate.orientation.y + p.pose.orientation.y / self.num_particles
-            estimate.orientation.z = estimate.orientation.z + p.pose.orientation.z / self.num_particles
-            estimate.orientation.w = estimate.orientation.w + p.pose.orientation.w / self.num_particles
+        # Caluclate the average of each value by dividing by the total number
+        # of particles
+        estimate.position.x /= self.num_particles
+        estimate.position.y /= self.num_particles
+        estimate.orientation.x /= self.num_particles
+        estimate.orientation.y /= self.num_particles
+        estimate.orientation.z /= self.num_particles
+        estimate.orientation.w /= self.num_particles
+
         # Set the estimated pose to our new estimate
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        # scan = data
-        # for p in self.particle_cloud:
-        #     x = p.pose.position.x
-        #     y = p.pose.position.y
-        #     theta = (euler_from_quaternion(
-        #         [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
-        #     # print("Updating particle at [", x, y, theta, "]")
-        #     q = 1
-        #     info = False
-        #     cd = [0, 90, 180, 270]
-        #     for a in cd:
-        #         z_k = scan.ranges[a]
-        #         # print("Looking in direction: ", a, "| range: ", z_k)
-        #         if np.isfinite(z_k):
-        #             # Calculate X and Y given z^k_t
-        #             x_z = x + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.cos(theta + radians(a))
-        #             y_z = y + 0 * np.cos(theta) - 0 * np.sin(theta) + z_k * np.sin(theta + radians(a))
-        #             dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
-        #             if dist:
-        #                 info = True
-        #                 prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-        #                 # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
-        #                 #       prob)
-        #                 q = q * prob
-        #         else:
-        #             pass
-        #             # print("Too far to tell")
-        #     if info:
-        #         p.w = q
-        pass
+        for p in self.particle_cloud:
+            theta = (euler_from_quaternion(
+                [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
+            # print("Updating particle at [", x, y, theta, "]")
+            q = 1
+            info = False
+            # cd = [0, 90, 180, 270]
+            # cd = list(range(36))
+            # cd *= 10
+            cd = list(range(360))
+            # Iterate through each direction
+            for a in cd:
+                z_k = data.ranges[a]
+                # print("Looking in direction: ", a, "| range: ", z_k)
+                if np.isfinite(z_k):
+                    # Calculate X and Y given z^k_t
+                    x_z = p.pose.position.x + (z_k * np.cos(theta + np.radians(a))) * self.map.info.resolution
+                    y_z = p.pose.position.y + (z_k * np.sin(theta + np.radians(a))) * self.map.info.resolution
+                    dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+                    if dist:
+                        info = True
+                        # Compute the probability of the particle's observation matching the robot's
+                        prob = compute_prob_zero_centered_gaussian(dist, 0.1)
+                        # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
+                        #       prob)
+                        q *= prob
+
+                # else:
+                #     pass
+                    # print("Too far to tell")
+            if info:
+                p.w = q
+        # pass
 
     def model_odometry_translation(self):
         curr_x = self.odom_pose.pose.position.x
@@ -366,9 +389,11 @@ class ParticleFilter:
         d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
 
         # TODO: Experiment for constants here
-        rot1_rands = np.random.normal(0, .00, self.num_particles)
-        trans_rands = np.random.normal(0, .00, self.num_particles)
-        rot2_rands = np.random.normal(0, .00, self.num_particles)
+        rot1_rands = np.random.normal(0, 0.001, self.num_particles)
+        trans_rands = np.random.normal(0, 0.001, self.num_particles)
+        rot2_rands = np.random.normal(0, 0.001, self.num_particles)
+
+        # rot1_rands = trans_rands = rot2_rands = [0] * self.num_particles
 
         for p, r1_r, t_r, r2_r in zip(self.particle_cloud, rot1_rands, trans_rands, rot2_rands):
             # Draw a random x,y position using our height and width
@@ -378,15 +403,15 @@ class ParticleFilter:
 
             pose_yaw = get_yaw_from_pose(p.pose)
 
-            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1)
-            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1)
+            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) * self.map.info.resolution
+            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) * self.map.info.resolution
 
             pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
 
-            if pose_yaw > 2 * math.pi:
-                pose_yaw = pose_yaw % 2 * math.pi
+            if pose_yaw > (2 * math.pi):
+                pose_yaw = pose_yaw % (2 * math.pi)
             elif pose_yaw < 0:
-                pose_yaw = pose_yaw + 2 * math.pi
+                pose_yaw = pose_yaw + (2 * math.pi)
 
 
             # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
@@ -398,7 +423,7 @@ class ParticleFilter:
             # Populate that pose with our new random position
             p.pose.position.x = pose_x
             p.pose.position.y = pose_y
-            p.pose.position.z = 0
+            # p.pose.position.z = 0
             # and orientation
             p.pose.orientation.x = pose_quaternion[0]
             p.pose.orientation.y = pose_quaternion[1]
