@@ -101,7 +101,7 @@ class ParticleFilter:
 
         # Set a resolution for how many measurements we want to take per particle
         # 24 measurements per particle means include every 15th degree
-        self.measurement_resolution = 24  # measurements per particle
+        self.measurement_resolution = 36  # measurements per particle
         if 360 % self.measurement_resolution != 0:
             print("Bad measurement resolution chosen: ", self.measurement_resolution)
             sys.exit()

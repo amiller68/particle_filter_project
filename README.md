@@ -67,7 +67,7 @@ We begin by initializing a cloud of randomly (uniformly) distributed particles w
 ## Steps
 ###	Initialization of particle cloud
 Location: ``initialize_particle_cloud()``
-Description: To initialize the particle cloud, we start by defining some local variables with information about the map of the environment, specifically the map data, resolution, width, height, and origin location. We then draw three sets of random samples of length ``num_particles``, one ranging from 0 - ``map_width`` (x values), one from from 0 - ``map_height`` (y values), and one from 0 - 1 (later to be multiplied by 2pi for our yaw values). We use the built-in function ``zip()`` to group the random x, y, and yaw values together to add to the particle clouds, and also initialize each weight to 1.0.
+Description: To initialize the particle cloud, we start by defining some local variables with information about the map of the environment, specifically the map data, resolution, width, height, and origin location. We then draw three sets of random samples of length ``num_particles``, one ranging from 0 - ``map_width`` (x values), one from from 0 - ``map_height`` (y values), and one from 0 - 1 (later to be multiplied by 2pi for our yaw values). We use the built-in function ``zip()`` to group the random x, y, and yaw values together to add to the particle clouds, and also initialize each weight to 1.0 if the particle is on the map, and 0.0 otherwise.
 
 ### Movement model
 Location: ``update_particles_with_motion_model()``
@@ -77,26 +77,36 @@ Description:
 
 ### Measurement model
 Location: ``update_particles_with_measurement_model()``
-Description: For each particle in ``self.particle_cloud``, we “look” in each of the four cardinal directions (in degrees: 0, 90, 180, 270) to find the nearest obstacle using a likelihood field. We then calculate the probability of the reported nearest obstacle being the observed/nearest obstacle in each direction to determine the likelihood that that particle is the true location of the robot. The likelihood is set as the weight of each particle. 
+Description: For each particle in ``self.particle_cloud``, we “look” in `self.measurement_resolution` directions (every 10th degree) to find the nearest obstacle using a likelihood field. We then calculate the probability of the reported nearest obstacle being the observed/nearest obstacle in each direction to determine the likelihood that that particle is the true location of the robot. The likelihood is set as the weight of each particle. 
 
 ### Resampling
 Location: ``resample_particles()``
 Description: We use ``np.random.choice()`` to resample the particles with replacement based on their normalized weights. First, we use list comprehension to assemble a list of each particles weight. We then feed that list and ``self.particle_cloud`` into ``np.random.choice()`` to compute a new particle cloud of the same length ``num_particles``. 
 
 ### Incorporation of noise
-Location: 
-Description: 
+Location: ``update_particles_with_motion_model()``
+Description: When we update the position attributes of each particle, we add noise from ``self.num_particles`` samples from a 0-centered normal distribution. This is sufficient for adding noise to our model.
 
 ### Updating estimated robot pose
 Location: ``update_estimated_robot_pose()``
 Description: To update the estimated pose of the robot we take the unweighted mean of the position and orientation of all particles in ``self.particle_cloud``. We initialize an empty ``Pose`` and iterate through all of the particles, adding the quotient of their position/orientation and ``self.num_particles`` to the new ``Pose``’s position/orientation. We then set ``self.robot_estimate`` equal to the new ``Pose``.
 
 ### Optimization of parameters
-Location: 
-Description: 
+- ``self.num_particles``
+  - The higher this variable was, the more particles we simulated, and the more accurate our model was. However, it also increased computational load since it meant processing more particles. We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+- ``self.measurement_resolution``
+  - The higher this variable was, the more particles we simulated, and the more accurate our model was. However, it also increased computational load since it meant processing sensor measurements for each particle. We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+- ``update_particles_with_motion_model``
+  - We had to experiment with the standard deviation we calculated our 0-centered noise with. We settled on `0.1` for all our translation variables; any smaller did not seem to produce noticeable noise in the movement of our particles.
 
 ## Challenges
+This project entailed many difficulties. We are working with a computationally intense model in limited environments, with a framework we're unfamiliar with.
+Because of this, it was hard to test our implementation for bugs, recognize them, and come up with well-informed solutions. We spent more time than we probably should trying to guess what was wrong with our code
+because we couldn't say why, for example, our particles seemed to move at a pace 10x that of our robot. We countered this by trying to test each part of our code
+as methodically as possible.
 
 ## Future Work
+There are a couple of things we would improve in our implementation. For one, we settled on using parameters that, loosely, 'worked.' It would be worth the additional time to try
+and come to a more rigorous assessment of what parameters maximized the performance of our model. 
 
 ## Takeaways
