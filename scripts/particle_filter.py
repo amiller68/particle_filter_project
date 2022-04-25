@@ -79,14 +79,24 @@ class ParticleFilter:
         self.odom_frame = "odom"
         self.scan_topic = "scan"
 
-        # inialize our map
+        # initialize our map
         self.map = OccupancyGrid()
+        # initialize a likelihood field of the map
         self.likelihood_field = LikelihoodField()
 
         # the number of particles used in the particle filter
-        self.num_particles = 1000
+        # self.num_particles = 10000
+        self.num_particles = 5000
 
+        # Keep track of our total normalized weights for error checking during resample
         self.weight_sum = 0
+
+        # Set a resolution for how many measurements we want to take per particle
+        # 24 measurements per particle means include every 15th degree
+        self.measurement_resolution = 24  # measurements per particle
+        if 360 % self.measurement_resolution != 0:
+            print("Bad measurement resolution chosen: ", self.measurement_resolution)
+            sys.exit()
 
         # initialize the particle cloud array
         self.particle_cloud = []
@@ -228,6 +238,7 @@ class ParticleFilter:
                 size = self.num_particles,
                 p=particle_probabilities
             )
+            # print("Resampled size: ", len(self.particle_cloud))
         # On some sort of exception, log and error.
         except ValueError as e:
             print(e)
@@ -336,17 +347,14 @@ class ParticleFilter:
 
     def update_particle_weights_with_measurement_model(self, data):
         for p in self.particle_cloud:
-            theta = (euler_from_quaternion(
-                [p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])[2])
-            # print("Updating particle at [", x, y, theta, "]")
+            theta = get_yaw_from_pose(p.pose)
             q = 1
-            info = False
-            # cd = [0, 90, 180, 270]
-            # cd = list(range(36))
-            # cd *= 10
-            cd = list(range(360))
+            usable_dist_info = False
+            measurement_directions = [
+                direction * (360 // self.measurement_resolution) for direction in range(self.measurement_resolution)
+            ]
             # Iterate through each direction
-            for a in cd:
+            for a in measurement_directions:
                 z_k = data.ranges[a]
                 # print("Looking in direction: ", a, "| range: ", z_k)
                 if np.isfinite(z_k):
@@ -355,19 +363,13 @@ class ParticleFilter:
                     y_z = p.pose.position.y + (z_k * np.sin(theta + np.radians(a))) * self.map.info.resolution
                     dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
                     if dist:
-                        info = True
-                        # Compute the probability of the particle's observation matching the robot's
+                        usable_dist_info = True
                         prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-                        # print("Scan Value: ", z_k, " | Projected Scan location: ", x_z, y_z, " | Dist: ", dist, "| prob: ",
-                        #       prob)
                         q *= prob
-
-                # else:
-                #     pass
-                    # print("Too far to tell")
-            if info:
+            if usable_dist_info:
                 p.w = q
-        # pass
+            # else:
+            #     p.w = p.w / 2
 
     def model_odometry_translation(self):
         curr_x = self.odom_pose.pose.position.x
@@ -389,9 +391,9 @@ class ParticleFilter:
         d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
 
         # TODO: Experiment for constants here
-        rot1_rands = np.random.normal(0, 0.001, self.num_particles)
-        trans_rands = np.random.normal(0, 0.001, self.num_particles)
-        rot2_rands = np.random.normal(0, 0.001, self.num_particles)
+        rot1_rands = np.random.normal(0, 0.1, self.num_particles)
+        trans_rands = np.random.normal(0, 0.1, self.num_particles)
+        rot2_rands = np.random.normal(0, 0.1, self.num_particles)
 
         # rot1_rands = trans_rands = rot2_rands = [0] * self.num_particles
 
@@ -413,9 +415,9 @@ class ParticleFilter:
             elif pose_yaw < 0:
                 pose_yaw = pose_yaw + (2 * math.pi)
 
-
+            # Uncommenting this causes
             # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
-            #     p.w = p.w / 100
+            #     p.w = p.w / 2
 
             # Calculate the quaternion for our new pose
             pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
