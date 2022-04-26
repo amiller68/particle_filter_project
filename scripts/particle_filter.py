@@ -94,18 +94,20 @@ class ParticleFilter:
 
         # the number of particles used in the particle filter
         # self.num_particles = 10
-        self.num_particles = 10000
+        self.num_particles = 2000
 
         # Keep track of our total normalized weights for error checking during resample
         self.weight_sum = 0
 
         # Set a resolution for how many measurements we want to take per particle
         # 24 measurements per particle means include every 15th degree
-        self.measurement_resolution = 36  # measurements per particle
+        self.measurement_resolution = 180  # measurements per particle
         if 360 % self.measurement_resolution != 0:
             print("Bad measurement resolution chosen: ", self.measurement_resolution)
             sys.exit()
-
+        self.measurement_directions = [
+            direction * (360 // self.measurement_resolution) for direction in range(self.measurement_resolution)
+        ]
         # initialize the particle cloud array
         self.particle_cloud = []
 
@@ -221,7 +223,7 @@ class ParticleFilter:
         if all_equal:
             weights = np.array([1.0] * self.num_particles)
         normalized_weights = weights / weights.sum()
-        self.weight_sum = weights.sum()
+        self.weight_sum = normalized_weights.sum()
         # Update every particle using the new normalized weight
         for p, nw in zip(self.particle_cloud, normalized_weights):
             p.w = nw
@@ -247,12 +249,17 @@ class ParticleFilter:
         particle_probabilities = [p.w for p in self.particle_cloud]
         try:
             # Resample the particles based on their weights
-            self.particle_cloud = np.random.choice(
+            pc = np.random.choice(
                 self.particle_cloud,
                 size=self.num_particles,
                 p=particle_probabilities
             )
-            # print("Resampled size: ", len(self.particle_cloud))
+            self.particle_cloud = pc
+            # self.particle_cloud = []
+            # print(len(pc))
+            # for p in pc:
+            #     self.particle_cloud.append(Particle(p.pose, p.w))
+            print("Resampled set size: ", len(set(self.particle_cloud)))
         # On some sort of exception, log and error.
         except ValueError as e:
             print(e)
@@ -360,18 +367,18 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        count = 0
+        # count = 0
         print("Updating particles by measurement")
-        for p in self.particle_cloud:
+        pc = self.particle_cloud
+        self.particle_cloud = []
+        for p in pc:
             theta = get_yaw_from_pose(p.pose)
             # print("Updating particle: pos: <", p.pose.position.x, p.pose.position.y, theta, "> | weight: ", p.w)
             q = 1
             usable_dist_info = False
-            measurement_directions = [
-                direction * (360 // self.measurement_resolution) for direction in range(self.measurement_resolution)
-            ]
             # Iterate through each direction
-            for a in measurement_directions:
+            # rands = np.random.normal(1, .5, len(measurement_directions))
+            for a in self.measurement_directions:
                 z_k = data.ranges[a]
                 # print("Looking in direction: ", a, "| range: ", z_k, "| q: ", q)
                 # Account for both simulated and live runs
@@ -383,20 +390,21 @@ class ParticleFilter:
                     # if this is a position on the map
                     # print("Likelihood pos: pos: <", x_z, y_z, "> | dist: ", dist)
                     if not math.isnan(dist):
-                        if not usable_dist_info:
-                            count += 1
+                        # if not usable_dist_info:
+                        #     count += 1
                         usable_dist_info = True
-                        prob = compute_prob_zero_centered_gaussian(dist, 0.25)
+                        prob = compute_prob_zero_centered_gaussian(dist, 0.3) # + randint(50, 100) / 100
                         # print("Prob: ", prob)
                         # if not math.isnan(prob):
                         q = q * self.z_hit * prob
             if usable_dist_info:
                 # print("New weight: ", q)
                 p.w = q
-        if not count:
-            print("[ERROR] No likelihoods to use as updaters!!")
-        else:
-            print(count, "/", self.num_particles, "good updates")
+            self.particle_cloud.append(Particle(p.pose, p.w))
+        # if not count:
+        #     print("[ERROR] No likelihoods to use as updaters!!")
+        # else:
+        #     print(count, "/", self.num_particles, "good updates")
         # print(updates)
 
     def model_odometry_translation(self):
@@ -419,16 +427,17 @@ class ParticleFilter:
         d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
 
         # TODO: Experiment for constants here
-        # rot1_rands = np.random.normal(0, 0.5, self.num_particles)
-        # trans_rands = np.random.normal(0, 0.5, self.num_particles)
-        # rot2_rands = np.random.normal(0, 0.5, self.num_particles)
-        rot1_rands = np.random.normal(d_rot1, 0.5, self.num_particles)
-        trans_rands = np.random.normal(d_trans, 0.5, self.num_particles)
-        rot2_rands = np.random.normal(d_rot2, 0.5, self.num_particles)
+        # rot1_rands = np.random.normal(d_rot1, self.ang_mvmt_threshold / 2, self.num_particles)
+        # trans_rands = np.random.normal(d_trans, self.lin_mvmt_threshold, self.num_particles)
+        # rot2_rands = np.random.normal(d_rot2, self.ang_mvmt_threshold / 2, self.num_particles)
+        rot1_rands = np.random.normal(d_rot1, 0.1, self.num_particles)
+        trans_rands = np.random.normal(d_trans, 0.1, self.num_particles)
+        rot2_rands = np.random.normal(d_rot2, 0.1, self.num_particles)
 
         # rot1_rands = trans_rands = rot2_rands = [0] * self.num_particles
-
-        for p, r1_r, t_r, r2_r in zip(self.particle_cloud, rot1_rands, trans_rands, rot2_rands):
+        pc = self.particle_cloud
+        self.particle_cloud = []
+        for p, r1_r, t_r, r2_r in zip(pc, rot1_rands, trans_rands, rot2_rands):
             # Draw a random x,y position using our height and width
             d_hat_rot1 = r1_r #d_rot1 + r1_r
             d_hat_trans = t_r # d_trans + t_r
@@ -441,14 +450,9 @@ class ParticleFilter:
 
             pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
 
-            if pose_yaw > (2 * math.pi):
-                pose_yaw = pose_yaw % (2 * math.pi)
-            elif pose_yaw < 0:
-                pose_yaw = pose_yaw + (2 * math.pi)
-
             # Uncommenting this causes
-            # if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
-            #     p.w = p.w / 2
+            if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
+                p.w = p.w / 100
 
             # Calculate the quaternion for our new pose
             pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
@@ -462,6 +466,9 @@ class ParticleFilter:
             p.pose.orientation.y = pose_quaternion[1]
             p.pose.orientation.z = pose_quaternion[2]
             p.pose.orientation.w = pose_quaternion[3]
+
+            self.particle_cloud.append(Particle(p.pose, p.w))
+
 
 if __name__=="__main__":
 
