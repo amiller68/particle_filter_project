@@ -445,8 +445,8 @@ class ParticleFilter:
 
             pose_yaw = get_yaw_from_pose(p.pose)
 
-            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) * self.map.info.resolution
-            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) * self.map.info.resolution
+            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) #* self.map.info.resolution
+            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) #* self.map.info.resolution
 
             pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
 
