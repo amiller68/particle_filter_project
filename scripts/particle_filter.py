@@ -90,11 +90,11 @@ class ParticleFilter:
         # initialize a likelihood field of the map
         self.likelihood_field = LikelihoodField()
 
-        self.z_hit = 0.8
+        self.z_hit = 1.0
 
         # the number of particles used in the particle filter
         # self.num_particles = 10
-        self.num_particles = 5000
+        self.num_particles = 1000
 
         # Keep track of our total normalized weights for error checking during resample
         self.weight_sum = 0
@@ -420,13 +420,13 @@ class ParticleFilter:
         for p, r1_r, t_r, r2_r in zip(self.particle_cloud, rot1_rands, trans_rands, rot2_rands):
             # Draw a random x,y position using our height and width
             d_hat_rot1 = d_rot1 + r1_r
-            d_hat_trans = d_trans + t_r
+            d_hat_trans = d_trans + (t_r * self.map.info.resolution)
             d_hat_rot2 = d_rot2 + r2_r
 
             pose_yaw = get_yaw_from_pose(p.pose)
 
-            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) * self.map.info.resolution
-            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) * self.map.info.resolution
+            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) #* self.map.info.resolution
+            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) #* self.map.info.resolution
 
             pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
 
