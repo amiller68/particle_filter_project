@@ -90,11 +90,11 @@ class ParticleFilter:
         # initialize a likelihood field of the map
         self.likelihood_field = LikelihoodField()
 
-        self.z_hit = 0.8
+        self.z_hit = 1
 
         # the number of particles used in the particle filter
         # self.num_particles = 10
-        self.num_particles = 5000
+        self.num_particles = 10000
 
         # Keep track of our total normalized weights for error checking during resample
         self.weight_sum = 0
@@ -360,9 +360,11 @@ class ParticleFilter:
         self.robot_estimate = estimate
 
     def update_particle_weights_with_measurement_model(self, data):
-        any = False
+        count = 0
+        print("Updating particles by measurement")
         for p in self.particle_cloud:
             theta = get_yaw_from_pose(p.pose)
+            # print("Updating particle: pos: <", p.pose.position.x, p.pose.position.y, theta, "> | weight: ", p.w)
             q = 1
             usable_dist_info = False
             measurement_directions = [
@@ -371,24 +373,30 @@ class ParticleFilter:
             # Iterate through each direction
             for a in measurement_directions:
                 z_k = data.ranges[a]
-                # print("Looking in direction: ", a, "| range: ", z_k)
+                # print("Looking in direction: ", a, "| range: ", z_k, "| q: ", q)
+                # Account for both simulated and live runs
                 if np.isfinite(z_k) or z_k == 0:
                     # Calculate X and Y given z^k_t
-                    x_z = p.pose.position.x + (z_k * np.cos(theta + np.radians(a))) # * self.map.info.resolution
-                    y_z = p.pose.position.y + (z_k * np.sin(theta + np.radians(a))) # * self.map.info.resolution
+                    x_z = p.pose.position.x + z_k * np.cos(theta + np.radians(a)) # * self.map.info.resolution
+                    y_z = p.pose.position.y + z_k * np.sin(theta + np.radians(a)) # * self.map.info.resolution
                     dist = self.likelihood_field.get_closest_obstacle_distance(x_z, y_z)
+                    # if this is a position on the map
+                    # print("Likelihood pos: pos: <", x_z, y_z, "> | dist: ", dist)
                     if not math.isnan(dist):
-                        any = True
+                        if not usable_dist_info:
+                            count += 1
                         usable_dist_info = True
-                        prob = compute_prob_zero_centered_gaussian(dist, 0.1)
-                        if not math.isnan(prob):
-                            q = q * self.z_hit * prob
+                        prob = compute_prob_zero_centered_gaussian(dist, 0.25)
+                        # print("Prob: ", prob)
+                        # if not math.isnan(prob):
+                        q = q * self.z_hit * prob
             if usable_dist_info:
+                # print("New weight: ", q)
                 p.w = q
-        if not any:
+        if not count:
             print("[ERROR] No likelihoods to use as updaters!!")
         else:
-            print("At least one good update")
+            print(count, "/", self.num_particles, "good updates")
         # print(updates)
 
     def model_odometry_translation(self):
@@ -411,17 +419,20 @@ class ParticleFilter:
         d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
 
         # TODO: Experiment for constants here
-        rot1_rands = np.random.normal(0, 0.1, self.num_particles)
-        trans_rands = np.random.normal(0, 0.1, self.num_particles)
-        rot2_rands = np.random.normal(0, 0.1, self.num_particles)
+        # rot1_rands = np.random.normal(0, 0.5, self.num_particles)
+        # trans_rands = np.random.normal(0, 0.5, self.num_particles)
+        # rot2_rands = np.random.normal(0, 0.5, self.num_particles)
+        rot1_rands = np.random.normal(d_rot1, 0.5, self.num_particles)
+        trans_rands = np.random.normal(d_trans, 0.5, self.num_particles)
+        rot2_rands = np.random.normal(d_rot2, 0.5, self.num_particles)
 
         # rot1_rands = trans_rands = rot2_rands = [0] * self.num_particles
 
         for p, r1_r, t_r, r2_r in zip(self.particle_cloud, rot1_rands, trans_rands, rot2_rands):
             # Draw a random x,y position using our height and width
-            d_hat_rot1 = d_rot1 + r1_r
-            d_hat_trans = d_trans + t_r
-            d_hat_rot2 = d_rot2 + r2_r
+            d_hat_rot1 = r1_r #d_rot1 + r1_r
+            d_hat_trans = t_r # d_trans + t_r
+            d_hat_rot2 = r2_r # d_rot2 + r2_r
 
             pose_yaw = get_yaw_from_pose(p.pose)
 
