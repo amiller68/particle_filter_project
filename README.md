@@ -1,6 +1,10 @@
 # particle_filter_project
 Alex Miller and Josh Garza
 
+## Flex hours used:
+Alex: 13:08
+Josh: 13:07
+
 ## Implementation Plan
  - How will you initialize your particle cloud (`initialize_particle_cloud`)?
    - The particle cloud is an array of `Particle`s that represents an estimation of the robot's location
@@ -40,16 +44,16 @@ This week:
 - [x] Implement particle normalization and resampling 
 - [x] Implement guessing current position based on state of our particle cloud
    - Ended up taking position from average of top 5 percent of guesses
-- [ ] Implement probabilistic position updating
+- [x] Implement probabilistic position updating
    - Design and implement a prototype model that calculates positional probability
    - Test if we can rule out some positions just based on the movement of our robot
    - Try doing this without incorporating noise, and then try incorporating noise
   
 Next Week
-- Implement particle cloud weight updating using laser scan data
-  - Implement a prototype model
+- [x] Implement particle cloud weight updating using laser scan data
+  - [x] Implement a prototype model
 - Test functionality
-- Tweak noise and out of bounds parameters
+- [x] Tweak noise and out of bounds parameters
 - Test functionality
 - If needed change models
 - Test functionality
@@ -57,6 +61,12 @@ Next Week
 - Edit writeup
 - If time's left do EC
 
+
+## Gif
+
+![](particle_filter.gif)
+
+If this is too low quality, please look at our mp4
 
 ## Objectives
 The goal of this project is to implement an algorithm to estimate the state (position and orientation) of a robot in a known environment. Given a map of its environment and real-time sensor and odometry data, the goal is to simulate what the robot would see if it were at various different points and compare that to what it is actually seeing. After several iterations, we should be able to come up with an increasingly accurate estimation of its location in real-time.
@@ -93,20 +103,37 @@ Description: To update the estimated pose of the robot we take the unweighted me
 
 ### Optimization of parameters
 - ``self.num_particles``
-  - The higher this variable was, the more particles we simulated, and the more accurate our model was. However, it also increased computational load since it meant processing more particles. We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+  - The higher this variable was, the more particles we simulated, and the more accurate our model was. 
+  - However, it also increased computational load since it meant processing more particles. 
+  - We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+  - We decided on a set of 7500 particles
 - ``self.measurement_resolution``
-  - The higher this variable was, the more particles we simulated, and the more accurate our model was. However, it also increased computational load since it meant processing sensor measurements for each particle. We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+  - The higher this variable was, the more particles we simulated, and the more accurate our model was. 
+  - However, it also increased computational load since it meant processing sensor measurements for each particle.
+  - We set this variable as high as possible without triggering errors from our transformers due to lag. Doing so maximized our models performance and accuracy.
+  - We decided on a resolution of 90 measurements per particle per update step
 - ``update_particles_with_motion_model``
-  - We had to experiment with the standard deviation we calculated our 0-centered noise with. We settled on `0.1` for all our translation variables; any smaller did not seem to produce noticeable noise in the movement of our particles.
-
+  - We had to experiment with the bounds of the uniform noise we used. 
+  - We settled on `0.1` for all our translation variables; any smaller did not seem to produce noticeable noise in the movement of our particles.
+- ``self.z_hit and self.z_rand``
+  - These parameters determined how sensitive our model was to reported likelihoods in our measurement model.
+  - We had to find a balance between these variables s.t. our model didn't overly privilege any one particle, but also didn't overvalue the weights of inaccurate guesses
+  - We settled on a balance of `z_hit` = .65 and `z_rand` = .35
+- ``The standard deviation of our gaussian for computing distance likelihood``
+  - This parameter determined how sensitive our model was to error in our likelihood field readings
+  - If this value was too low then some particles were eliminated from the particle cloud too readily because they were assigned near zero weights
+  - We settled on a value of `0.5` for this parameter
 ## Challenges
 This project entailed many difficulties. We are working with a computationally intense model in limited environments, with a framework we're unfamiliar with.
 Because of this, it was hard to test our implementation for bugs, recognize them, and come up with well-informed solutions. We spent more time than we probably should trying to guess what was wrong with our code
 because we couldn't say why, for example, our particles seemed to move at a pace 10x that of our robot. We countered this by trying to test each part of our code
-as methodically as possible.
+as methodically as possible and recorded observations so we didn't make repeat mistakes.
+It was also challenging to balance so many different parameters in one model, and test them robustly, since their values could radically change the accuracy of the model, and testing was so slow.
 
 ## Future Work
 There are a couple of things we would improve in our implementation. For one, we settled on using parameters that, loosely, 'worked.' It would be worth the additional time to try
-and come to a more rigorous assessment of what parameters maximized the performance of our model. 
+and come to a more rigorous assessment of what parameters maximized the performance of our model. It would be nice to have some method to test and catalog results more rigorous than taking quick notes on scrap paper.
 
 ## Takeaways
+Testing the correctness of predictive models is very challenging. It took a lot of time to implement, tweak, and test our implementation, and even now I am not sure how robust it is in the face of edge cases.
+In the future I know it helps to think methodically through the effects of setting certain parameters to certain values and testing my predictions, in order to come to a greater understanding of my implementation.

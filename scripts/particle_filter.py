@@ -19,7 +19,7 @@ from numpy.random import random_sample
 import math
 from math import pi
 
-from random import randint, random
+from random import randint, random, uniform
 
 import time, sys
 
@@ -90,18 +90,18 @@ class ParticleFilter:
         # initialize a likelihood field of the map
         self.likelihood_field = LikelihoodField()
 
-        self.z_hit = 1
+        self.z_hit = .65
+        self.z_rand = .35
 
         # the number of particles used in the particle filter
-        # self.num_particles = 10
-        self.num_particles = 2000
+        self.num_particles = 7500
 
         # Keep track of our total normalized weights for error checking during resample
         self.weight_sum = 0
 
         # Set a resolution for how many measurements we want to take per particle
-        # 24 measurements per particle means include every 15th degree
-        self.measurement_resolution = 180  # measurements per particle
+        # 90 measurements per particle means include every 4th degree
+        self.measurement_resolution = 90  # measurements per particle
         if 360 % self.measurement_resolution != 0:
             print("Bad measurement resolution chosen: ", self.measurement_resolution)
             sys.exit()
@@ -159,6 +159,7 @@ class ParticleFilter:
         map_data = self.map.data
         # A float describing m / cell fo the map
         map_resolution = map_info.resolution
+        print("Map res: ", map_resolution)
         # How many cells the map is across
         map_width = map_info.width
         # How many cells the map is up and down
@@ -231,7 +232,7 @@ class ParticleFilter:
     def publish_particle_cloud(self):
         particle_cloud_pose_array = PoseArray()
         particle_cloud_pose_array.header = Header(stamp=rospy.Time.now(), frame_id=self.map_topic)
-        # particle_cloud_pose_array.poses
+        particle_cloud_pose_array.poses
 
         for part in self.particle_cloud:
             particle_cloud_pose_array.poses.append(part.pose)
@@ -254,11 +255,9 @@ class ParticleFilter:
                 size=self.num_particles,
                 p=particle_probabilities
             )
+
             self.particle_cloud = pc
-            # self.particle_cloud = []
-            # print(len(pc))
-            # for p in pc:
-            #     self.particle_cloud.append(Particle(p.pose, p.w))
+
             print("Resampled set size: ", len(set(self.particle_cloud)))
         # On some sort of exception, log and error.
         except ValueError as e:
@@ -377,7 +376,6 @@ class ParticleFilter:
             q = 1
             usable_dist_info = False
             # Iterate through each direction
-            # rands = np.random.normal(1, .5, len(measurement_directions))
             for a in self.measurement_directions:
                 z_k = data.ranges[a]
                 # print("Looking in direction: ", a, "| range: ", z_k, "| q: ", q)
@@ -390,23 +388,15 @@ class ParticleFilter:
                     # if this is a position on the map
                     # print("Likelihood pos: pos: <", x_z, y_z, "> | dist: ", dist)
                     if not math.isnan(dist):
-                        # if not usable_dist_info:
-                        #     count += 1
                         usable_dist_info = True
-                        prob = compute_prob_zero_centered_gaussian(dist, 0.3) # + randint(50, 100) / 100
-                        # print("Prob: ", prob)
-                        # if not math.isnan(prob):
-                        q = q * self.z_hit * prob
+                        prob = compute_prob_zero_centered_gaussian(dist, 0.5)
+                        q *= self.z_hit * prob + self.z_rand / data.range_max
             if usable_dist_info:
                 # print("New weight: ", q)
                 p.w = q
             self.particle_cloud.append(Particle(p.pose, p.w))
-        # if not count:
-        #     print("[ERROR] No likelihoods to use as updaters!!")
-        # else:
-        #     print(count, "/", self.num_particles, "good updates")
-        # print(updates)
 
+    # Determine the appropriate translation for each particle based on the robots reported odometry update
     def model_odometry_translation(self):
         curr_x = self.odom_pose.pose.position.x
         old_x = self.odom_pose_last_motion_update.pose.position.x
@@ -424,35 +414,30 @@ class ParticleFilter:
         return d_rot1, d_trans, d_rot2
 
     def update_particles_with_motion_model(self):
+        lost_particles = False
         d_rot1, d_trans, d_rot2 = self.model_odometry_translation()
-
-        # TODO: Experiment for constants here
-        # rot1_rands = np.random.normal(d_rot1, self.ang_mvmt_threshold / 2, self.num_particles)
-        # trans_rands = np.random.normal(d_trans, self.lin_mvmt_threshold, self.num_particles)
-        # rot2_rands = np.random.normal(d_rot2, self.ang_mvmt_threshold / 2, self.num_particles)
-        rot1_rands = np.random.normal(d_rot1, 0.1, self.num_particles)
-        trans_rands = np.random.normal(d_trans, 0.1, self.num_particles)
-        rot2_rands = np.random.normal(d_rot2, 0.1, self.num_particles)
 
         # rot1_rands = trans_rands = rot2_rands = [0] * self.num_particles
         pc = self.particle_cloud
         self.particle_cloud = []
-        for p, r1_r, t_r, r2_r in zip(pc, rot1_rands, trans_rands, rot2_rands):
-            # Draw a random x,y position using our height and width
-            d_hat_rot1 = r1_r #d_rot1 + r1_r
-            d_hat_trans = t_r # d_trans + t_r
-            d_hat_rot2 = r2_r # d_rot2 + r2_r
+        # for p, r1_r, t_r, r2_r in zip(pc, rot1_rands, trans_rands, rot2_rands):
+        for p in pc:
+            d_hat_rot1 =  d_rot1
+            d_hat_trans = d_trans
+            d_hat_rot2 = d_rot2
 
             pose_yaw = get_yaw_from_pose(p.pose)
 
-            pose_x = p.pose.position.x + d_hat_trans * math.cos(pose_yaw + d_hat_rot1) * self.map.info.resolution
-            pose_y = p.pose.position.y + d_hat_trans * math.sin(pose_yaw + d_hat_rot1) * self.map.info.resolution
+            # Update p's x, y, and yaw coords in accordance with our reported translation, while including uniform noise
+            pose_x = p.pose.position.x + (d_hat_trans * math.cos(pose_yaw + d_hat_rot1) + uniform(-.1, .1)) * self.map.info.resolution
+            pose_y = p.pose.position.y + (d_hat_trans * math.sin(pose_yaw + d_hat_rot1) + uniform(-.1, .1)) * self.map.info.resolution
 
-            pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2
+            pose_yaw = pose_yaw + d_hat_rot1 + d_hat_rot2 + uniform(-.1,.1)
 
-            # Uncommenting this causes
+            # If any particle moves off the edge of the map, lower its weight so it gets sampled out
             if not self.likelihood_field.get_closest_obstacle_distance(pose_x, pose_y):
-                p.w = p.w / 100
+                lost_particles = True
+                p.w = p.w / 1000
 
             # Calculate the quaternion for our new pose
             pose_quaternion = quaternion_from_euler(0, 0, pose_yaw)
@@ -460,7 +445,8 @@ class ParticleFilter:
             # Populate that pose with our new random position
             p.pose.position.x = pose_x
             p.pose.position.y = pose_y
-            # p.pose.position.z = 0
+            p.pose.position.z = 0
+
             # and orientation
             p.pose.orientation.x = pose_quaternion[0]
             p.pose.orientation.y = pose_quaternion[1]
@@ -468,6 +454,8 @@ class ParticleFilter:
             p.pose.orientation.w = pose_quaternion[3]
 
             self.particle_cloud.append(Particle(p.pose, p.w))
+        if lost_particles:
+            print("[ERROR] lost at least one particle off the side of the map")
 
 
 if __name__=="__main__":
